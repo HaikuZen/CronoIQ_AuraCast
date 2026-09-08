@@ -1,0 +1,28 @@
+idf_component_register(
+    SRCS
+        "app_main.c"
+        "app_config.c"
+        "app_sensors.c"
+        "app_weather.c"
+        "time_sync.c"
+        "wifi_sta.c"
+        "ui/ui.c"
+        "ui/seven_seg.c"
+        "ui/weather_icon.c"
+        "ui/page_clock.c"
+        "ui/page_weather.c"
+        "ui/page_message.c"
+    INCLUDE_DIRS
+        "."
+        "ui"
+    REQUIRES
+        board
+        weather
+        lvgl__lvgl
+        esp_wifi
+        esp_netif
+        esp_event
+        nvs_flash
+        lwip
+        espressif__cjson
+)

@@ -1,0 +1,26 @@
+idf_component_register(
+    SRCS
+        "display_st7305.c"
+        "lvgl_port.c"
+        "i2c_bus.c"
+        "shtc3.c"
+        "pcf85063.c"
+        "button.c"
+        "multi_button/multi_button.c"
+        "sdcard.c"
+        "battery.c"
+    INCLUDE_DIRS
+        "include"
+    PRIV_INCLUDE_DIRS
+        "multi_button"
+    REQUIRES
+        driver
+        esp_lcd
+        lvgl__lvgl
+    PRIV_REQUIRES
+        esp_timer
+        esp_adc
+        fatfs
+        esp_driver_sdmmc
+        esp_driver_gpio
+)

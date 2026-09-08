@@ -1,0 +1,21 @@
+{
+  "wifi": {
+    "ssid": "YourNetwork",
+    "password": "YourPassword"
+  },
+  "weather": {
+    "provider": "visualcrossing",
+    "api_key": "YOUR_VISUAL_CROSSING_KEY",
+    "location": "45.4642,9.1900",
+    "city": "",
+    "forecast_days": 3,
+    "metric": true
+  },
+  "time": {
+    "tz": "CET-1CEST,M3.5.0,M10.5.0/3",
+    "ntp_server": "pool.ntp.org"
+  },
+  "sensor": {
+    "temp_offset_dc": -40
+  }
+}

@@ -1,0 +1,14 @@
+idf_component_register(
+    SRCS
+        "weather.c"
+        "provider_visualcrossing.c"
+        "provider_openmeteo.c"
+        "provider_openweathermap.c"
+    INCLUDE_DIRS
+        "include"
+    PRIV_REQUIRES
+        esp_http_client
+        esp-tls
+        mbedtls
+        espressif__cjson
+)
