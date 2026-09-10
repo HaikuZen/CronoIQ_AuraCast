@@ -32,15 +32,18 @@ runtime behaviour. Treat display and provider code as "builds, unverified".
 ## Layout & responsibilities
 
 ```
-components/board/     Hardware BSP. C, plain esp-idf drivers. No app logic.
-components/weather/    HTTPS fetch + JSON parse -> weather_data_t. No UI, no config struct.
-main/                  Glue: config, clocks, wifi, worker tasks, LVGL UI.
-main/ui/               One file per page. ui.c owns the page manager.
+components/board/       Hardware BSP. C, plain esp-idf drivers. No app logic.
+components/weather/      HTTPS fetch + JSON parse -> weather_data_t. No UI, no config struct.
+components/codec_board/  Vendored espressif/codec_board 0.5.5, trimmed + patched (see below).
+components/voice/        Mic capture, silence detection, playback, WakeNet seam. voice.h is the API.
+main/                    Glue: config, clocks, wifi, worker tasks, LVGL UI.
+main/ui/                 One file per page. ui.c owns the page manager.
 ```
 
-Dependency direction: `main` → (`board`, `weather`). `board` and `weather` never
-include anything from `main`. `weather` takes a plain `weather_query_t`, not
-`app_config_t`, so it stays standalone.
+Dependency direction: `main` → (`board`, `weather`, `voice`). `board`, `weather`,
+`voice` never include anything from `main`. `weather` takes a plain
+`weather_query_t`; `voice` emits `voice_status_t` through a callback — both stay
+standalone. `voice` → `codec_board`.
 
 ### Key files
 
@@ -103,6 +106,56 @@ include anything from `main`. `weather` takes a plain `weather_query_t`, not
   returned a real name.
 - Weather worker waits for the first NTP sync (up to 60 s) before its first fetch
   so forecast-day `mktime` timestamps are correct.
+- **Audio pins** (S3_RLCD_4_2): I2S MCLK 16 / BCLK 9 / WS 45 / DIN 10 / DOUT 8,
+  PA enable 46; ES8311 `0x18`, ES7210 `0x40` on the shared I2C bus.
+- **codec_board is vendored + patched**: `lcd_init.c` removed (used IDF-6-removed
+  LCD APIs), legacy `driver/i2c.h` include dropped, `_i2c_init()` patched to reuse
+  the bus our `i2c_bus.c` created on `I2C_NUM_0` (search "CronoIQ patch"), and
+  `board_cfg.txt` `S3_RLCD_4_2` `pa_gain` lowered 6→0. Re-apply if re-vendored.
+- **Playback loudness**: `esp_codec_dev` ES8311 driver does
+  `dac_db -= (20·log10(3.3/5.0) + pa_gain)`. `board_cfg.txt` `pa_gain` is the only
+  real loudness lever above `CONFIG_VOICE_SPEAKER_VOL` (which maxes at 100).
+  Lower `pa_gain` = louder / more clip risk. All I2S pins verified against the
+  board GPIO map — playback→ES8311 (DSDIN 8), mic→ES7210 (ASDOUT 10).
+- **Voice pipeline has no AEC** — WakeNet detection pauses while a session
+  records/plays (`voice_session_active()` gate in `voice_wakenet.c`).
+- **WakeNet is ON** (`CONFIG_VOICE_WAKENET_ENABLE=y`): esp-sr AFE in
+  `voice_wakenet.c` owns the mic; `voice_wakeword.c` (DIY listener) is `#if`-gated
+  off. Model `wn9_hiesp` ("Hi, ESP") packed into the `model` partition
+  (`partitions.csv`), flashed with the app. esp-sr adds ~1.4 MB to the binary
+  (now ~3 MB / 27 % free in the 4 MB slot).
+- **esp-sr ⇒ mbedTLS OOM**: esp-sr eats internal RAM, so the TLS handshake for
+  the weather fetch fails with `PSA error 0xffffff73` (-141, insufficient memory)
+  unless `CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y` + `CONFIG_MBEDTLS_DYNAMIC_BUFFER=y`
+  (both in `sdkconfig.defaults`) and AFE uses `AFE_MEMORY_ALLOC_MORE_PSRAM`.
+- **Wake word "Ehi Ciccio"**: `voice_enroll.c` records N clips (Kconfig
+  `VOICE_ENROLL_SAMPLES`) to `/sdcard/wakeword/ehiciccio_*.wav` + an `enrolled`
+  marker; `voice_wakeword_enrolled()` drives page 3's status. `voice_wakeword.c`
+  is the **always-on listener** — starts once enrolled, endpoints utterances and
+  calls `ww_match()`, which is a **stub returning false** (finish it with esp-dsp
+  MFCC+DTW, or use the esp-sr path). `voice_wakenet.c` (esp-sr AFE) still exists
+  behind `CONFIG_VOICE_WAKENET_ENABLE`, untested, esp-sr not in deps by default.
+- **Voice trigger paths** all funnel through `voice.c:kick()` → session task:
+  `voice_trigger()` = memo (page 4), `voice_enroll_start()` = enrollment (page 4),
+  `voice_wake_response(pcm,n)` = wake response (page 3 "Here we go!" + play `pcm`,
+  or enrollment clip 1 if pcm is NULL). `voice_notify_wake()` is an alias for
+  `voice_wake_response(NULL,0)`. `voice_session_active()` is true for all.
+  Enrollment needs the SD card (clips ~150 KB, too big for NVS) — no SD →
+  `VOICE_EVT_ENROLL_FAIL`.
+- **Overlay routing** (`ui.c:s_overlay`): `OVL_VOICE` → page 4 + `page_voice_update`;
+  `OVL_WAKE` → page 3 + `page_message_update` (with `page_message_set_wake(true)`);
+  `app_voice.c:on_evt` picks `ui_enter_wake`/`ui_exit_wake` vs the voice pair off
+  `VOICE_EVT_WAKE_RESPONSE` vs `VOICE_EVT_WAKE`. Wake response auto-returns after
+  playback + 1.2 s; the memo/enrollment wait for KEY.
+- **KEY routing** (`on_button` in `app_main.c`): `app_voice_on_key()` first — it
+  consumes *every* KEY press while a voice overlay is up. Otherwise:
+  single-click → `ui_next_page()`; long-press → dispatched by `ui_current_page()`
+  (0 = `time_sync_resync()`, 1 = `app_weather_request_refresh()`,
+  2 = `app_voice_enroll_start()`). BOOT long-press → `voice_wake_response(NULL,0)`
+  (simulate wake word); BOOT double-click → `voice_trigger()` (memo test).
+- Page 4 (`SCREEN_VOICE = 3` in `ui.c`) is outside the `PAGE_COUNT` cycle;
+  `ui_enter_voice()` / `ui_exit_voice()` are driven from the voice callback and
+  save/restore the page you were on.
 
 ## Common tasks
 
@@ -115,5 +168,10 @@ listed in `weather.h`.
 **Add a page**: `main/ui/page_x.c` with `page_x_create(parent)` + `page_x_update()`,
 declare in `ui_internal.h`, bump `PAGE_COUNT` and the `s_screens`/`switch` blocks
 in `ui.c`, add to `main/CMakeLists.txt`.
+
+**Tune the voice memo**: Kconfig under `Voice memo` — `VOICE_SILENCE_DBFS`,
+`VOICE_TRAILING_SILENCE_MS`, `VOICE_MIN_SPEECH_MS`, `VOICE_MAX_RECORD_MS`,
+`VOICE_MIC_GAIN_DB`, `VOICE_SPEAKER_VOL`. Silence detection is plain RMS in
+`voice.c:frame_dbfs()` — no esp-sr needed.
 
 **Change a default**: `DEF_*` macros at the top of `main/app_config.c`.

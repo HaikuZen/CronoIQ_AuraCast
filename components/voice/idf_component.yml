@@ -1,0 +1,6 @@
+dependencies:
+  espressif/esp_codec_dev: ">=1.3.0"
+  # esp-sr is only compiled/linked when CONFIG_VOICE_WAKENET_ENABLE=y (gated in
+  # CMakeLists.txt); it is downloaded regardless. Remove this line for the
+  # leanest possible checkout if you never intend to use WakeNet.
+  espressif/esp-sr: ">=2.0.0"

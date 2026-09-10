@@ -4,20 +4,24 @@ idf_component_register(
         "app_config.c"
         "app_sensors.c"
         "app_weather.c"
+        "app_voice.c"
         "time_sync.c"
         "wifi_sta.c"
         "ui/ui.c"
         "ui/seven_seg.c"
         "ui/weather_icon.c"
+        "ui/mic_icon.c"
         "ui/page_clock.c"
         "ui/page_weather.c"
         "ui/page_message.c"
+        "ui/page_voice.c"
     INCLUDE_DIRS
         "."
         "ui"
     REQUIRES
         board
         weather
+        voice
         lvgl__lvgl
         esp_wifi
         esp_netif

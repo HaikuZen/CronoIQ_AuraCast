@@ -6,6 +6,7 @@
 
 #include "esp_log.h"
 #include "esp_sntp.h"
+#include "esp_timer.h"
 
 #include "pcf85063.h"
 
@@ -14,6 +15,7 @@ static const char *TAG = "time_sync";
 static char s_ntp_server[64] = "pool.ntp.org";
 static volatile bool s_ntp_done;
 static bool s_sntp_started;
+static volatile int64_t s_resync_until_us;   // "resyncing" indicator deadline
 
 static void write_system_time_to_rtc(void)
 {
@@ -39,6 +41,7 @@ static void on_sync(struct timeval *tv)
 {
     (void)tv;
     s_ntp_done = true;
+    s_resync_until_us = 0;
     write_system_time_to_rtc();
 }
 
@@ -90,4 +93,20 @@ void time_sync_start_sntp(void)
 bool time_sync_ntp_done(void)
 {
     return s_ntp_done;
+}
+
+void time_sync_resync(void)
+{
+    if (!s_sntp_started) {
+        ESP_LOGW(TAG, "resync requested before SNTP start (no network yet)");
+        return;
+    }
+    ESP_LOGI(TAG, "manual NTP resync");
+    esp_sntp_restart();
+    s_resync_until_us = esp_timer_get_time() + 15 * 1000 * 1000;
+}
+
+bool time_sync_resyncing(void)
+{
+    return s_resync_until_us != 0 && esp_timer_get_time() < s_resync_until_us;
 }

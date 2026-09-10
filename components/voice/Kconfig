@@ -1,0 +1,52 @@
+menu "Voice memo"
+
+    config VOICE_SAMPLE_RATE
+        int "Recording sample rate (Hz)"
+        default 16000
+
+    config VOICE_MAX_RECORD_MS
+        int "Maximum recording length (ms)"
+        default 30000
+
+    config VOICE_MIN_SPEECH_MS
+        int "Minimum speech before silence can stop recording (ms)"
+        default 700
+
+    config VOICE_TRAILING_SILENCE_MS
+        int "Trailing silence that stops recording (ms)"
+        default 1500
+
+    config VOICE_SILENCE_DBFS
+        int "Silence threshold (dBFS, negative)"
+        default -45
+
+    config VOICE_MIC_GAIN_DB
+        int "Microphone gain (dB)"
+        default 36
+
+    config VOICE_SPEAKER_VOL
+        int "Playback volume (0..100)"
+        default 90
+
+    config VOICE_ENROLL_SAMPLES
+        int "Wake-word enrollment: number of samples to record"
+        default 3
+
+    config VOICE_ENROLL_MAX_MS
+        int "Wake-word enrollment: max length per sample (ms)"
+        default 2500
+
+    config VOICE_ENROLL_SILENCE_MS
+        int "Wake-word enrollment: trailing silence that ends a sample (ms)"
+        default 600
+
+    config VOICE_WAKENET_ENABLE
+        bool "Enable WakeNet hands-free wake word (needs esp-sr + a model)"
+        default n
+        help
+            When off, the voice memo is started by a KEY long-press and esp-sr is
+            not compiled in. Turn on once an "Ehi Ciccio" WakeNet model is
+            available: add a `model` partition, drop the model into esp-sr's
+            model set, and reflash. See README.
+
+endmenu

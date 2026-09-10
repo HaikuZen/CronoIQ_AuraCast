@@ -15,3 +15,7 @@ void      page_weather_update(void);
 
 lv_obj_t *page_message_create(lv_obj_t *parent);
 void      page_message_update(void);
+void      page_message_set_wake(bool on);   // "Here we go!" wake-response mode
+
+lv_obj_t *page_voice_create(lv_obj_t *parent);
+void      page_voice_update(void);

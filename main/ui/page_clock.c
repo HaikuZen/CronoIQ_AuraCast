@@ -115,7 +115,8 @@ void page_clock_update(void)
 
     // Status line: wifi + time source + battery.
     const char *wifi_sym = wifi_sta_connected() ? LV_SYMBOL_WIFI : LV_SYMBOL_WARNING;
-    const char *src = time_sync_ntp_done() ? "NTP" : "RTC";
+    const char *src = time_sync_resyncing() ? LV_SYMBOL_REFRESH " sync"
+                      : (time_sync_ntp_done() ? "NTP" : "RTC");
     int pct = battery_percent();
     if (battery_voltage() > 2.5f) {
         snprintf(buf, sizeof(buf), "%s   %s   %s %d%%", wifi_sym, src, battery_symbol(pct), pct);

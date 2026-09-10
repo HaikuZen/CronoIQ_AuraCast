@@ -17,6 +17,13 @@ void time_sync_start_sntp(void);
 // True once at least one NTP sync has completed this boot.
 bool time_sync_ntp_done(void);
 
+// Force an immediate SNTP re-poll (page 1 KEY long-press). No-op before the
+// first Wi-Fi connection.
+void time_sync_resync(void);
+
+// True for ~15 s after time_sync_resync() until the next sync lands.
+bool time_sync_resyncing(void);
+
 #ifdef __cplusplus
 }
 #endif
