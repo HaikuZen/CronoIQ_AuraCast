@@ -104,6 +104,32 @@ standalone. `voice` → `codec_board`.
 - **Place name**: `weather_fetch()` reverse-geocodes `"lat,lon"` to "City, CC"
   via BigDataCloud (keyless) unless `weather.city` is set or the provider already
   returned a real name.
+- **Telegram (`@CML_robot`) current-conditions overlay**: `provider_telegram_cml.c`
+  does NOT talk to Telegram at all — `@CML_robot` only answers a real user
+  account's `/realtime` + locality (as two separate messages) in a private
+  chat, and ESP32 firmware has no realistic way to speak Telegram's real
+  client protocol (MTProto: encrypted handshake, custom TL binary
+  serialization, persistent login session — nothing like a REST API). So this
+  provider is just another `weather_http_get()` JSON call, pointed at
+  `telegram.bridge_url` — a small off-device script
+  (`tools/telegram_cml_bridge.py`, Telethon + aiohttp) that holds the actual
+  Telegram login (via `my.telegram.org` `api_id`/`api_hash`) and exposes
+  `GET /realtime?locality=...` → `{"ok":true,"text":"<raw reply>"}`. The reply
+  text itself is still parsed with `strstr`/`strtof` (fixed Italian format,
+  no cJSON for that part) — only the transport changed, not the parsing.
+  `day_count` is always 0 (no forecast from this source).
+  `app_weather.c:apply_telegram_overlay()` is the real "switch" — it layers
+  `cur_temp`/`cur_feels`/`cur_humidity`/`cur_cond`/`location_label` from this
+  source onto whatever the primary `weather.provider` returned each fetch, iff
+  `telegram.enabled` and both `bridge_url`/`locality` are set; it no-ops if
+  `weather.provider` is already `"telegram"` (then `weather_fetch()` alone
+  already produced that data). The bridge's own `REPLY_TIMEOUT_S` (12 s) must
+  stay under `weather_http_get()`'s fixed 15 s client timeout — it owns the
+  whole Telegram round-trip and only responds once it has an answer or gives
+  up; a timeout (either side) just skips the overlay for that cycle, primary
+  data stands. The bridge script is untested against live Telegram from this
+  environment (no login path available here) — its Telethon API calls were
+  verified against the installed library's real signatures, not run end-to-end.
 - Weather worker waits for the first NTP sync (up to 60 s) before its first fetch
   so forecast-day `mktime` timestamps are correct.
 - **Audio pins** (S3_RLCD_4_2): I2S MCLK 16 / BCLK 9 / WS 45 / DIN 10 / DOUT 8,
@@ -161,9 +187,18 @@ standalone. `voice` → `codec_board`.
 
 **Add a weather provider**: new `components/weather/provider_x.c` exporting
 `weather_provider_x(const weather_query_t*, weather_data_t*)`; add it to the
-dispatch `if` chain and the `SRCS` list in `weather.c` / CMake. Normalise
-conditions via `weather_norm_text()` or `weather_norm_wmo()` into the vocabulary
-listed in `weather.h`.
+dispatch `if` chain in `weather_fetch()` and the `SRCS` list in `weather.c` /
+CMake. Write the full condition text straight into `cur_cond`/`days[].cond`
+(icon selection reads it back out via `weather_condition_key()` — see
+`provider_openmeteo.c`'s `weather_wmo_text()` for a from-code-to-text example).
+Doesn't have to be JSON — `provider_telegram_cml.c` parses plain text instead.
+
+**Add a non-forecast current-conditions overlay** (like the Telegram one): a
+provider that only ever sets `cur_*`/`location_label` and leaves `day_count` at
+0 can either be selected outright via `weather.provider`, or layered on top of
+another provider's forecast — see `app_weather.c:apply_telegram_overlay()` for
+the pattern (a config `*_enabled` switch + a short-circuit when that provider is
+already the primary one).
 
 **Add a page**: `main/ui/page_x.c` with `page_x_create(parent)` + `page_x_update()`,
 declare in `ui_internal.h`, bump `PAGE_COUNT` and the `s_screens`/`switch` blocks

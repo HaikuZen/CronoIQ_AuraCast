@@ -12,6 +12,7 @@
 #include "weather.h"
 
 static lv_obj_t *s_loc;
+static lv_obj_t *s_now;           // current time row
 static lv_obj_t *s_cur_icon;
 static lv_obj_t *s_cur_temp;      // 7-segment canvas
 static lv_obj_t *s_cur_cond;      // full condition text (wraps)
@@ -33,11 +34,16 @@ lv_obj_t *page_weather_create(lv_obj_t *parent)
     lv_obj_set_style_text_align(s_loc, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(s_loc, LV_ALIGN_TOP_MID, 0, 4);
 
-    s_cur_icon = weather_icon_create(parent, 84);
-    lv_obj_align(s_cur_icon, LV_ALIGN_TOP_LEFT, 12, 30);
+    s_now = ui_label(parent, &lv_font_montserrat_20, "--:--");
+    lv_obj_set_width(s_now, 392);
+    lv_obj_set_style_text_align(s_now, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(s_now, LV_ALIGN_TOP_MID, 0, 28);
 
-    s_cur_temp = seven_seg_create(parent, 210, 82);
-    lv_obj_align(s_cur_temp, LV_ALIGN_TOP_LEFT, 104, 28);
+    s_cur_icon = weather_icon_create(parent, 64);
+    lv_obj_align(s_cur_icon, LV_ALIGN_TOP_LEFT, 12, 52);
+
+    s_cur_temp = seven_seg_create(parent, 210, 64);
+    lv_obj_align(s_cur_temp, LV_ALIGN_TOP_LEFT, 104, 48);
 
     s_cur_cond = ui_label(parent, &lv_font_montserrat_16, "");
     lv_obj_set_width(s_cur_cond, 290);
@@ -86,6 +92,12 @@ void page_weather_update(void)
 
     weather_data_t w;
     char buf[128];
+
+    time_t now_ts = time(NULL);
+    struct tm now_tm;
+    localtime_r(&now_ts, &now_tm);
+    strftime(buf, sizeof(buf), "%H:%M", &now_tm);
+    lv_label_set_text(s_now, buf);
 
     if (!app_weather_get(&w) || !w.ok) {
         lv_label_set_text(s_loc, "Weather");

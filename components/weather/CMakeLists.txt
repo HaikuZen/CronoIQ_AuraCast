@@ -4,6 +4,7 @@ idf_component_register(
         "provider_visualcrossing.c"
         "provider_openmeteo.c"
         "provider_openweathermap.c"
+        "provider_telegram_cml.c"
     INCLUDE_DIRS
         "include"
     PRIV_REQUIRES

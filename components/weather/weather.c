@@ -129,8 +129,9 @@ const char *weather_condition_key(const char *text)
     if (has(text, "rain") || has(text, "shower"))              return "rain";
     if (has(text, "fog") || has(text, "mist") || has(text, "haze")) return "fog";
     if (has(text, "wind") || has(text, "gale") || has(text, "breez")) return "wind";
-    if (has(text, "partly") || has(text, "part-") || has(text, "few clouds") ||
-        has(text, "scattered") || has(text, "mainly clear"))   return "partly";
+    if (has(text, "partly") || has(text, "partial") || has(text, "part-") ||
+        has(text, "few clouds") || has(text, "scattered") ||
+        has(text, "mainly clear"))                             return "partly";
     if (has(text, "overcast") || has(text, "cloud"))           return "cloudy";
     if (has(text, "clear") || has(text, "sun") || has(text, "fair")) return "clear";
     return "unknown";
@@ -243,6 +244,8 @@ esp_err_t weather_fetch(const weather_query_t *q, weather_data_t *out)
         return ESP_ERR_INVALID_ARG;
     }
     memset(out, 0, sizeof(*out));
+    out->cur_wind = -1;
+    out->cur_precip = -1;
 
     weather_query_t norm = *q;
     if (norm.days < 1) {
@@ -260,6 +263,9 @@ esp_err_t weather_fetch(const weather_query_t *q, weather_data_t *out)
     } else if (strcasecmp(norm.provider, "openweathermap") == 0 || strcasecmp(norm.provider, "owm") == 0) {
         fn = weather_provider_openweathermap;
         name = "openweathermap";
+    } else if (strcasecmp(norm.provider, "telegram") == 0 || strcasecmp(norm.provider, "cml") == 0) {
+        fn = weather_provider_telegram_cml;
+        name = "telegram";
     } else if (norm.provider[0] && strcasecmp(norm.provider, "visualcrossing") != 0) {
         ESP_LOGW(TAG, "unknown provider '%s', using visualcrossing", norm.provider);
     }
@@ -278,5 +284,24 @@ esp_err_t weather_fetch(const weather_query_t *q, weather_data_t *out)
         strlcpy(out->cur_cond, "Unknown", sizeof(out->cur_cond));
     }
     resolve_place_name(&norm, out);
+    return ESP_OK;
+}
+
+esp_err_t weather_fetch_telegram_current(const weather_query_t *q, weather_data_t *out)
+{
+    if (!q || !out) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    memset(out, 0, sizeof(*out));
+    out->cur_wind = -1;
+    out->cur_precip = -1;
+    esp_err_t err = weather_provider_telegram_cml(q, out);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "telegram cml fetch failed: %s", esp_err_to_name(err));
+        return err;
+    }
+    out->ok = true;
+    out->updated = time(NULL);
+    strlcpy(out->provider, "telegram", sizeof(out->provider));
     return ESP_OK;
 }

@@ -95,7 +95,7 @@ void seven_seg_set_text(lv_obj_t *canvas, const char *txt)
     int ch = db->header.h;
 
     // Vertical margin as a fraction of canvas height — larger = smaller digits.
-    int my = ch * 15 / 100;
+    int my = ch * 7 / 100;
     int dh = ch - 2 * my;
     int t = dh * 18 / 100;           // heavy stroke
     int dw = dh * 58 / 100;

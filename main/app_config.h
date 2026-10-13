@@ -15,6 +15,19 @@ typedef struct {
     bool units_metric;      // true: degC ; false: degF
     int  forecast_days;     // 1..5
     int  temp_offset_dc;    // SHTC3 correction, tenths of degC (e.g. -40 = -4.0 C)
+
+    // Optional hyperlocal current-conditions overlay via the CML Telegram bot
+    // (@CML_robot), reached through a small self-hosted bridge (see
+    // tools/telegram_cml_bridge.py and the README) since talking to real
+    // Telegram accounts/bots isn't something firmware can do directly. When
+    // enabled, these fields win over the primary provider's current
+    // temp/humidity/condition each fetch; the primary provider's multi-day
+    // forecast is unaffected.
+    bool telegram_enabled;
+    char telegram_bridge_url[80];   // e.g. "http://192.168.1.50:8765"
+    char telegram_bridge_token[48]; // optional shared secret; "" = bridge has no auth
+    char telegram_locality[48];     // passed to the bridge, e.g. "Milano Arbe"
+
     bool from_sd;           // true if any value came from the SD card
 } app_config_t;
 

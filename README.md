@@ -99,15 +99,21 @@ edit:
     "metric": true
   },
   "time":    { "tz": "CET-1CEST,M3.5.0,M10.5.0/3", "ntp_server": "pool.ntp.org" },
-  "sensor":  { "temp_offset_dc": -40 }
+  "sensor":  { "temp_offset_dc": -40 },
+  "telegram": {
+    "enabled": false,
+    "bridge_url": "http://192.168.1.50:8765",
+    "bridge_token": "some-long-random-string",
+    "locality": "Milano Arbe"
+  }
 }
 ```
 
 | Key | Meaning |
 |---|---|
 | `wifi.ssid` / `wifi.password` | Station credentials. Open networks: leave `password` empty. |
-| `weather.provider` | `visualcrossing` \| `openmeteo` \| `openweathermap`. An unknown value falls back to Visual Crossing. |
-| `weather.api_key` | Required for Visual Crossing and OpenWeatherMap. Ignored by Open-Meteo. |
+| `weather.provider` | `visualcrossing` \| `openmeteo` \| `openweathermap` \| `telegram`. An unknown value falls back to Visual Crossing. |
+| `weather.api_key` | Required for Visual Crossing and OpenWeatherMap. Ignored by Open-Meteo and Telegram. |
 | `weather.location` | `"lat,lon"` works for **all** providers. Visual Crossing also accepts a place name (e.g. `"Torino,IT"`). |
 | `weather.city` | Optional label shown as the page title. Leave `""` to auto-resolve the place name from the coordinates (keyless reverse geocoding); set it to override. |
 | `weather.forecast_days` | 1–5. |
@@ -115,6 +121,10 @@ edit:
 | `time.tz` | POSIX TZ string. See the [zone table](https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv). |
 | `time.ntp_server` | Defaults to `pool.ntp.org`. |
 | `sensor.temp_offset_dc` | SHTC3 correction in **tenths of °C**. `-40` = −4.0 °C, compensating the board's self-heating (matches Waveshare's own demo). |
+| `telegram.enabled` | **The switch.** `true` layers hyperlocal current conditions from the CML Telegram bot (`@CML_robot`) on top of whatever `weather.provider` gives you — same forecast, more accurate "now". Set `weather.provider` to `"telegram"` instead if you want it as the *only* source (current conditions only, no forecast). |
+| `telegram.bridge_url` | Base URL of your own [`tools/telegram_cml_bridge.py`](tools/telegram_cml_bridge.py) instance (see below) — **not** anything Telegram-hosted. |
+| `telegram.bridge_token` | Optional shared secret matching the bridge's `BRIDGE_TOKEN` env var. Leave `""` if you didn't set one (fine on a trusted LAN). |
+| `telegram.locality` | Station/locality name passed as `/realtime` + this, e.g. `"Milano Arbe"`. |
 
 ### Provider notes
 
@@ -125,6 +135,33 @@ edit:
   zero-config default if you don't want to sign up anywhere.
 * **OpenWeatherMap** — [One Call API 3.0](https://openweathermap.org/api/one-call-3),
   needs a key with One Call enabled. `location` must be `"lat,lon"`.
+* **Telegram (`@CML_robot`)** — current conditions (temp, humidity, wind,
+  today's precipitation) from a real nearby station on the CML amateur weather
+  network, instead of a regional API estimate. No forecast.
+
+  `@CML_robot` only replies to a **real Telegram user account** messaging it
+  privately with `/realtime`, then the locality as a *separate* follow-up
+  message — not something a bot account or ESP32 firmware can do directly
+  (Telegram's real client protocol, MTProto, is a whole encrypted binary
+  protocol, not a REST API — there's no reasonable way to speak it from this
+  microcontroller). So the firmware instead talks to a small bridge you run
+  yourself, on any always-on computer (Raspberry Pi, spare Linux box, cheap
+  VPS): [`tools/telegram_cml_bridge.py`](tools/telegram_cml_bridge.py) logs
+  into your own Telegram account once (via credentials from
+  [my.telegram.org](https://my.telegram.org)) and exposes a tiny local
+  `GET /realtime?locality=...` → `{"ok": true, "text": "..."}` endpoint; the
+  ESP32 just GETs that, same as any other provider. See the script's own
+  docstring for the full setup (`pip install -r tools/requirements.txt`, get
+  `api_id`/`api_hash`, run it once to log in interactively, then point
+  `telegram.bridge_url` at it and set `telegram.enabled: true`). If
+  `@CML_robot` doesn't answer within the bridge's own timeout, the overlay is
+  skipped for that cycle and the primary provider's data is kept.
+
+  **Not independently tested against live Telegram/`@CML_robot`** — the
+  script was written and its Telethon API calls verified against the real
+  library signatures, but the actual login + message exchange needs your own
+  Telegram account to try; watch its stdout and the ESP32's `wx.telegram_cml`
+  / `app_weather` log lines the first time.
 
 ---
 
@@ -180,6 +217,8 @@ main/
   ui/seven_seg.c          font-free 7-segment renderer (clock + big temperatures)
   ui/weather_icon.c       font-free weather glyphs
   ui/mic_icon.c           font-free microphone / speaker glyph
+tools/
+  telegram_cml_bridge.py  off-device Telegram/MTProto <-> HTTP bridge for @CML_robot
 ```
 
 ### Threading
@@ -211,3 +250,6 @@ critical sections / mutexes) and touch LVGL objects without extra locking.
 | Weather page stuck on "loading..." | Check `weather.*` config; monitor log shows the exact URL status and any provider parse error. |
 | `wx.openmeteo: location must be "lat,lon"` | Open-Meteo / OpenWeatherMap don't geocode place names — use coordinates. |
 | `esp-x509-crt-bundle ... signature verification failed` / `PSA ... error 0xffffff73` | `-141` = out of internal RAM during the TLS handshake (esp-sr eats it). Fixed by `CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y` + `CONFIG_MBEDTLS_DYNAMIC_BUFFER=y` + AFE `AFE_MEMORY_ALLOC_MORE_PSRAM`. If it recurs, log `heap_caps_get_free_size(MALLOC_CAP_INTERNAL)` before the fetch. |
+| `wx.telegram_cml: bridge_url / locality not configured` | One of `telegram.bridge_url` / `locality` is empty while `telegram.enabled` is `true`, or `weather.provider` is `"telegram"` without them. |
+| Weather page never shows Telegram data, bridge script running fine | Check the bridge's own stdout for `/realtime` errors; confirm `curl "http://<bridge_host>:<port>/realtime?locality=<your locality>"` returns `{"ok":true,...}` by hand; if `telegram.bridge_token` is set, it must match the bridge's `BRIDGE_TOKEN`. |
+| Bridge script: no reply from `@CML_robot` (timeout) | Message `@CML_robot` by hand from the same Telegram account first — send `/realtime`, then the locality as a separate message — and confirm it answers before blaming the script. |

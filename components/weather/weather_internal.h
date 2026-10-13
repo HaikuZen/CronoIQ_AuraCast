@@ -21,6 +21,7 @@ esp_err_t weather_reverse_geocode(double lat, double lon, char *out, size_t cap)
 esp_err_t weather_provider_visualcrossing(const weather_query_t *q, weather_data_t *out);
 esp_err_t weather_provider_openmeteo(const weather_query_t *q, weather_data_t *out);
 esp_err_t weather_provider_openweathermap(const weather_query_t *q, weather_data_t *out);
+esp_err_t weather_provider_telegram_cml(const weather_query_t *q, weather_data_t *out);
 
 // Split "lat,lon" into numbers. Returns ESP_OK on success.
 esp_err_t weather_parse_latlon(const char *s, double *lat, double *lon);

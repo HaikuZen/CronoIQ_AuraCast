@@ -23,6 +23,10 @@
 #define DEF_UNITS_METRIC  true
 #define DEF_FORECAST_DAYS 3
 #define DEF_TEMP_OFFSET   -40                            // -4.0 C, matches Waveshare demo
+#define DEF_TG_ENABLED     false
+#define DEF_TG_BRIDGE_URL  ""
+#define DEF_TG_BRIDGE_TOKEN ""
+#define DEF_TG_LOCALITY    ""
 
 #define CONFIG_PATH  SDCARD_MOUNT_POINT "/config.json"
 
@@ -43,6 +47,10 @@ static void set_defaults(app_config_t *c)
     c->units_metric = DEF_UNITS_METRIC;
     c->forecast_days = DEF_FORECAST_DAYS;
     c->temp_offset_dc = DEF_TEMP_OFFSET;
+    c->telegram_enabled = DEF_TG_ENABLED;
+    strlcpy(c->telegram_bridge_url, DEF_TG_BRIDGE_URL, sizeof(c->telegram_bridge_url));
+    strlcpy(c->telegram_bridge_token, DEF_TG_BRIDGE_TOKEN, sizeof(c->telegram_bridge_token));
+    strlcpy(c->telegram_locality, DEF_TG_LOCALITY, sizeof(c->telegram_locality));
     c->from_sd = false;
 }
 
@@ -134,6 +142,14 @@ static bool apply_json(app_config_t *c, const char *json)
         copy_int(s, "temp_offset_dc", &c->temp_offset_dc, &touched);
     }
 
+    const cJSON *tg = cJSON_GetObjectItemCaseSensitive(root, "telegram");
+    if (tg) {
+        copy_bool(tg, "enabled", &c->telegram_enabled, &touched);
+        copy_str(tg, "bridge_url", c->telegram_bridge_url, sizeof(c->telegram_bridge_url), &touched);
+        copy_str(tg, "bridge_token", c->telegram_bridge_token, sizeof(c->telegram_bridge_token), &touched);
+        copy_str(tg, "locality", c->telegram_locality, sizeof(c->telegram_locality), &touched);
+    }
+
     cJSON_Delete(root);
 
     if (c->forecast_days < 1) c->forecast_days = 1;
@@ -163,6 +179,9 @@ void app_config_load(void)
              s_cfg.forecast_days, s_cfg.units_metric, s_cfg.tz);
     ESP_LOGI(TAG, "wifi ssid=\"%s\" key=%s", s_cfg.wifi_ssid,
              s_cfg.weather_key[0] ? "set" : "empty");
+    ESP_LOGI(TAG, "telegram cml overlay: %s locality=\"%s\" bridge=%s",
+             s_cfg.telegram_enabled ? "enabled" : "disabled", s_cfg.telegram_locality,
+             s_cfg.telegram_bridge_url[0] ? s_cfg.telegram_bridge_url : "unset");
 }
 
 const app_config_t *app_config_get(void)
